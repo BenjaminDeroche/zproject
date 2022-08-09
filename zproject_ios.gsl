@@ -1,4 +1,4 @@
-#   Genre iOS build system files
+#   Generate iOS build system files
 #
 #   This is a code generator built using the iMatix GSL code generation
 #   language. See https://github.com/zeromq/gsl for details.
@@ -48,28 +48,36 @@ $(project.GENERATED_WARNING_HEADER:)
 
 set -e
 
+# Set this to enable verbose profiling
+[ -n "${CI_TIME-}" ] || CI_TIME=""
+case "$CI_TIME" in
+    [Yy][Ee][Ss]|[Oo][Nn]|[Tt][Rr][Uu][Ee])
+        CI_TIME="time -p " ;;
+    [Nn][Oo]|[Oo][Ff][Ff]|[Ff][Aa][Ll][Ss][Ee])
+        CI_TIME="" ;;
+esac
+
+# Set this to enable verbose tracing
+[ -n "${CI_TRACE-}" ] || CI_TRACE="no"
+case "$CI_TRACE" in
+    [Nn][Oo]|[Oo][Ff][Ff]|[Ff][Aa][Ll][Ss][Ee])
+        set +x ;;
+    [Yy][Ee][Ss]|[Oo][Nn]|[Tt][Rr][Uu][Ee])
+        set -x ;;
+esac
+
 function usage {
     echo "Usage ./build.sh [ iPhoneOS armv7 | iPhoneOS armv7s | iPhoneOS arm64 | iPhoneSimulator i386 | iPhoneSimulator x86_64 ]"
 }
 
 PLATFORM=$1
-if [ -z PLATFORM ]; then
-    usage
-    exit 1
-fi
-
-if [[ $PLATFORM == "iPhoneOS" ]]; then
-    SDK="iphoneos"
-elif [[ $PLATFORM == "iPhoneSimulator" ]]; then
-    SDK="iphonesimulator"
-else
-    echo "Unknown platform '$PLATFORM'"
+if [ -z "$PLATFORM" ]; then
     usage
     exit 1
 fi
 
 TARGET=$2
-if [ -z $TARGET ]; then
+if [ -z "$TARGET" ]; then
     usage
     exit 1
 fi
@@ -86,9 +94,9 @@ export SDK_VERSION=${SDK_VERSION:-"15.5"}
 
 PLATFORM_PATH="/Applications/Xcode.app/Contents/Developer/Platforms"
 TOOLCHAIN_PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin"
-SYSROOT=$PLATFORM_PATH/$PLATFORM.platform/Developer/SDKs/$PLATFORM$SDK_VERSION.sdk
-OUTPUT_DIR=output/$PLATFORM/$TARGET
-PWD="\$(pwd)"
+SYSROOT="$PLATFORM_PATH/$PLATFORM.platform/Developer/SDKs/$PLATFORM$SDK_VERSION.sdk"
+OUTPUT_DIR="/tmp/ios_build/$PLATFORM/$TARGET"
+SDK="iphoneos"
 
 export CC="\$(xcrun -sdk $SDK -find clang)"
 export CPP="$CC -E"
@@ -97,13 +105,14 @@ export RANLIB="\$(xcrun -sdk $SDK -find ranlib)"
 export CFLAGS="-arch $TARGET -isysroot $SYSROOT -miphoneos-version-min=$SDK_VERSION -fembed-bitcode"
 export CPPFLAGS="-arch $TARGET -isysroot $SYSROOT -miphoneos-version-min=$SDK_VERSION -fembed-bitcode"
 export LDFLAGS="-arch $TARGET -isysroot $SYSROOT"
+export PKG_CONFIG_PATH="$OUTPUT_DIR/lib/pkgconfig"
 
 cd ../../
 mkdir -p $OUTPUT_DIR
-\./autogen.sh
-\./configure --prefix="$PWD/$OUTPUT_DIR" --host=$HOST-apple-darwin
-make
-make install
+$CI_TIME ./autogen.sh
+$CI_TIME ./configure --prefix=$OUTPUT_DIR --host=$HOST-apple-darwin --disable-shared --without-libcurl --without-liblz4
+$CI_TIME make
+$CI_TIME make install
 
 echo "$PLATFORM $TARGET build successful"
 $(project.GENERATED_WARNING_HEADER:)
@@ -114,10 +123,13 @@ $(project.GENERATED_WARNING_HEADER:)
 #!/usr/bin/env bash
 $(project.GENERATED_WARNING_HEADER:)
 
-#\./build.sh "iPhoneOS" "armv7" # Only available with SDK_VERSION <= 10
-#\./build.sh "iPhoneOS" "armv7s" # Only available with SDK_VERSION <= 10
+if [[ \$(uname | tr '[:upper:]' '[:lower:]') != "darwin" ]]; then
+    echo "Unsupported platform"
+    exit 1
+fi
+
 \./build.sh "iPhoneOS" "arm64"
-#\./build.sh "iPhoneSimulator" "i386" # Only available with SDK_VERSION <= 10
+git clean -fdx ../../
 \./build.sh "iPhoneSimulator" "x86_64"
 
 $(project.GENERATED_WARNING_HEADER:)

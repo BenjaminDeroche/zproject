@@ -12,6 +12,8 @@
 
 register_target ("ios", "Native library for iOS")
 
+function target_ios
+
 .macro target_ios
 .directory.create ("builds/ios")
 .
@@ -129,10 +131,242 @@ if [[ \$(uname | tr '[:upper:]' '[:lower:]') != "darwin" ]]; then
 fi
 
 \./build.sh "iPhoneOS" "arm64"
-git clean -fdx ../../
+git clean -fdx ../../..
 \./build.sh "iPhoneSimulator" "x86_64"
 
 $(project.GENERATED_WARNING_HEADER:)
 .close
 .chmod_x ("builds/ios/ci_build.sh")
+.
+.output "builds/ios/$(project.prefix:pascal)-Bridging-Header.h"
+/*
+$(project.GENERATED_WARNING_HEADER:)
+*/
+
+#ifndef __$(project.prefix:upper)_BRIDGING_HEADER_H__
+#define __$(project.prefix:upper)_BRIDGING_HEADER_H__
+
+#include "$(project.prefix:c).h"
+#include "swift_bindings_utils.h"
+
+#endif//__$(project.prefix:upper)_BRIDGING_HEADER_H__
+
+.close
 .endmacro
+
+function resolve_container (container)
+    #   Type of container shown to Swift
+    my.container.swift_type = ""
+
+    if my.container.type = "nothing"
+        my.container.swift_type = "void"
+
+    elsif my.container.type = "sockish"
+        my.container.swift_type = "Int"
+
+    elsif my.container.type = "boolean"
+        my.container.swift_type = "Bool"
+
+    elsif my.container.type = "size"
+        my.container.swift_type = "Int"
+
+    elsif my.container.type = "integer"
+        my.container.swift_type = "Int32"
+
+    elsif my.container.type = "number"
+        if my.container.size ?= "1"
+            my.container.swift_type = "UInt8"
+        elsif my.container.size = 2
+            my.container.swift_type = "UInt16"
+        elsif my.container.size = 4
+            my.container.swift_type = "UInt32"
+        elsif my.container.size = 8
+            my.container.swift_type = "UInt64"
+        endif
+
+    elsif my.container.type = "real"
+        if my.container.size ?= "4"
+            my.container.swift_type = "Float"
+        elsif my.container.size ?= "8"
+            my.container.swift_type = "Double"
+        endif
+
+    elsif my.container.type = "string"
+        if my.container.by_reference
+            return 1        #   Skip methods that do this
+        endif
+        my.container.swift_type = "String"
+
+    elsif my.container.type = "format"
+        my.container.swift_type = "String"
+
+    elsif count (project.class, class.c_name = my.container.type) \
+    |     count (project->dependencies.class, class.c_name = my.container.type)
+        my.container.swift_type = "$(my.container.type:pascal)"
+
+    else
+        abort "Unhandled type '$(my.container.type:)' in $(class.c_name)"
+    endif
+
+    return 0            #   Seems to be OK
+endfunction
+
+function resolve_method (method)
+    my.method.okay = 1
+
+    for my.method.argument
+        if resolve_container (argument) = 1
+            my.method.okay = 0
+            #echo "Skipping $(class.name).$(my.method.name) - can't deal with argument type $(argument.type)"
+            last
+        endif
+    endfor
+
+
+    for my.method.return
+        if resolve_container (return)
+            my.method.okay = 0
+            #echo "Skipping $(class.name).$(my.method.name) - can't deal with return type $(return.type:)"
+        endif
+    endfor
+endfunction
+
+function resolve_class (class)
+    my.class.okay = 1
+        for constructor
+            resolve_method (constructor)
+        endfor
+        for destructor
+            resolve_method (destructor)
+        endfor
+        for method
+            resolve_method (method)
+        endfor
+endfunction
+
+.macro generate_class (class)
+.   directory.create ("$(topdir)/$(project.prefix:c)-swift/src")
+.   output "$(topdir)/$(project.prefix:c)-swift/src/$(my.class.name:pascal).swift"
+/*
+$(project.GENERATED_WARNING_HEADER:)
+*/
+
+public class $(my.class.name:pascal) {
+    let ptr: OpaquePointer?
+
+    private init(_ ptr: OpaquePointer?) {
+        self.ptr = ptr!
+    }
+.   for constructor where okay
+
+    /*
+      $(description:no,block)
+    */
+    public static func $(name:camel)(\
+.       arg_count = count (argument)
+.       for argument
+$(name:camel): $(swift_type:no)\
+.           if index () <> arg_count
+, \
+.           endif
+.       endfor
+) -> $(my.class.name:pascal) {
+        return $(my.class.name:pascal)($(class.name:c)_$(constructor.name:c)(\
+.       for argument
+$(name:camel)\
+.           if index () <> arg_count
+, \
+.           endif
+.       endfor
+))
+    }
+.   endfor
+.   for destructor
+
+    /*
+      $(description:no,block)
+    */
+    deinit {
+        let selfPtr: UnsafeMutablePointer<OpaquePointer?>? = UnsafeMutablePointer(ptr)
+        $(my.class.name:c)_destroy(selfPtr)
+        selfPtr?.deallocate()
+    }
+.   endfor
+.   for method where okay
+
+    /*
+      $(description:no,block)
+    */
+.       if singleton = 1
+.           my.prefix = "public static"
+.       else
+.           my.prefix = "public"
+.       endif
+.       if ->return.type = "nothing"
+.           my.return_type = ""
+.       else
+.           my.return_type = " -> $(->return.swift_type:no)"
+.       endif
+    $(my.prefix) func $(method.name:lower,camel)(\
+.       arg_count = count (argument)
+.       for argument
+$(name:camel): $(swift_type:no)\
+.           if index () <> arg_count
+, \
+.           endif
+.       endfor
+)$(my.return_type:no) {
+.       if ->return.type = "nothing"
+.           my.return = ""
+.       elsif ->return.type = "string"
+.           if ->return.fresh = 1
+.               my.return = "let ret: UnsafeMutablePointer<CChar>? = "
+.           else
+.               my.return = "let ret: UnsafePointer<CChar>? = "
+.           endif
+.       elsif ->return.swift_type = "UInt32"
+.           my.return = "let ret: UInt = "
+.       else
+.           my.return = "let ret: $(->return.swift_type:no) = "
+.       endif
+.       if singleton = 1
+.           my.self_arg = ""
+.       else
+.           my.self_arg = "ptr"
+.       endif
+        $(my.return:no)$(class.name:c)_$(method.name:c)($(my.self_arg)\
+.       for argument
+.           if index () <> 1 | method.singleton <> 1
+, \
+.           endif
+.           if swift_type = "UInt32"
+UInt($(name:camel))\
+.           else
+$(name:camel)\
+.           endif
+.       endfor
+)
+.       if ->return.type = "string"
+        let str = String(validatingUTF8: ret!)!
+        ret?.deallocate()
+        return str
+.       elsif ->return.swift_type = "UInt32"
+        return UInt32(ret)
+.       elsif ->return.type <> "nothing"
+        return ret
+.       endif
+    }
+.   endfor
+}
+.endmacro
+
+    project.topdir = "bindings/swift"
+    directory.create (topdir)
+
+    for project.class
+        resolve_class (class)
+        if class.okay
+            generate_class (class)
+        endif
+    endfor
+endfunction

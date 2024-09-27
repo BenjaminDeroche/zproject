@@ -34,6 +34,7 @@ dist_bin_SCRIPTS = \
     zproject_java_lib.gsl \
     zproject_java_msvc.gsl \
     zproject_jenkins.gsl \
+    zproject_kotlin.gsl \
     zproject_lua_ffi.gsl \
     zproject_mingw32.gsl \
     zproject_nodejs.gsl \

@@ -192,6 +192,7 @@ zproject's `project.xml` contains an extensive description of the available conf
         ios                 Native library for iOS
         java                Java JNI binding
         java-msvc           MSVC builds for Java JNI binding
+        kotlin              Next gen Android/JVM binding
         jenkins             Jenkins pipeline build
         mingw32             Mingw32 build system
         nuget               Packaging for NuGet

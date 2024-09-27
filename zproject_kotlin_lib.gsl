@@ -1,4 +1,4 @@
-#   JNI common functions
+#   JNA common functions
 #
 #   This is a code generator built using the iMatix GSL code generation
 #   language. See https://github.com/zeromq/gsl for details.
@@ -11,20 +11,24 @@
 #   file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 function resolve_container (container)
+
+    if my.container.name = "val"
+        actual_name = "`$(my.container.name:camel)`"
+    else
+        actual_name = "$(my.container.name:camel)"
+    endif
+
     #   Type of container shown to Java apps
     my.container.jni_java_type = ""
-    #   Type of container passed to native code
-    my.container.jni_jni_type = ""
     #   Mapping from Java to JNI type
-    my.container.jni_mapping = "$(my.container.name:camel)"
+    my.container.jni_mapping = "$(actual_name:)"
     #   Is the container a known class type?
     my.container.jni_is_class = 0
     #   Is the container a self_p reference?
     my.container.jni_self_p = 0
 
     if my.container.type = "nothing"
-        my.container.jni_java_type = "void"
-        my.container.jni_jni_type = "void"
+        my.container.jni_java_type = "Unit"
 
     elsif my.container.type = "anything" \
     |     my.container.type = "sockish" \
@@ -32,66 +36,52 @@ function resolve_container (container)
     |     my.container.type = "time" \
     |     my.container.type = "msecs" \
     |     my.container.type = "file_size"
-        my.container.jni_java_type = "long"
-        my.container.jni_jni_type = "jlong"
+        my.container.jni_java_type = "Pointer"
 
     elsif my.container.type = "boolean"
-        my.container.jni_java_type = "boolean"
-        my.container.jni_jni_type = "jboolean"
+        my.container.jni_java_type = "Boolean"
 
     elsif my.container.type = "byte"
-        my.container.jni_java_type = "byte"
-        my.container.jni_jni_type = "jbyte"
+        my.container.jni_java_type = "Byte"
 
     elsif my.container.type = "char"
-        my.container.jni_java_type = "char"
-        my.container.jni_jni_type = "jchar"
+        my.container.jni_java_type = "Char"
 
     elsif my.container.type = "integer"
-        my.container.jni_java_type = "int"
-        my.container.jni_jni_type = "jint"
+        my.container.jni_java_type = "Int"
 
     elsif my.container.type = "number"
         if my.container.size ?= "1"
-            my.container.jni_java_type = "byte"
-            my.container.jni_jni_type = "jbyte"
+            my.container.jni_java_type = "Byte"
         elsif my.container.size = 2
-            my.container.jni_java_type = "short"
-            my.container.jni_jni_type = "jshort"
+            my.container.jni_java_type = "Short"
         elsif my.container.size = 4
-            my.container.jni_java_type = "int"
-            my.container.jni_jni_type = "jint"
+            my.container.jni_java_type = "Int"
         elsif my.container.size = 8
-            my.container.jni_java_type = "long"
-            my.container.jni_jni_type = "jlong"
+            my.container.jni_java_type = "Long"
         endif
 
     elsif my.container.type = "real"
         if my.container.size ?= "4"
-            my.container.jni_java_type = "float"
-            my.container.jni_jni_type = "jfloat"
+            my.container.jni_java_type = "Float"
         elsif my.container.size ?= "8"
-            my.container.jni_java_type = "double"
-            my.container.jni_jni_type = "jdouble"
+            my.container.jni_java_type = "Double"
         endif
 
     elsif my.container.type = "buffer"
         if my.container.by_reference
             return 1        #   Skip methods that do this
         endif
-        my.container.jni_java_type = "byte []"
-        my.container.jni_jni_type = "jbyteArray"
+        my.container.jni_java_type = "ByteArray"
 
     elsif my.container.type = "string"
         if my.container.by_reference
             return 1        #   Skip methods that do this
         endif
         my.container.jni_java_type = "String"
-        my.container.jni_jni_type = "jstring"
 
     elsif my.container.type = "format"
         my.container.jni_java_type = "String"
-        my.container.jni_jni_type = "jstring"
 
     elsif count (project.class, class.c_name = my.container.type & !defined (class.api))
         return 1        #   Refers to class that has no API model
@@ -102,9 +92,8 @@ function resolve_container (container)
     elsif count (project.class, class.c_name = my.container.type) \
     |     count (project->dependencies.class, class.c_name = my.container.type)
         my.container.jni_java_type = "$(my.container.type:pascal)"
-        my.container.jni_mapping = "$(my.container.name:camel).self"
-        my.container.jni_shim_type = "long"
-        my.container.jni_jni_type = "jlong"
+        my.container.jni_mapping = "$(actual_name:).self"
+        my.container.jni_shim_type = "Pointer"
         my.container.jni_is_class = 1
 
     elsif my.container.callback ?= 1
@@ -128,7 +117,9 @@ endfunction
 function resolve_method (method)
     my.method.okay = 1
 
-    if my.method.name = "clone" \
+    #   Escape reserved keywords in function names
+    if my.method.name = "is" \
+    | my.method.name = "clone" \
     |  my.method.name = "close" \
     |  my.method.name = "equals" \
     |  my.method.name = "finalize" \
@@ -139,7 +130,7 @@ function resolve_method (method)
     |  my.method.name = "notify" \
     |  my.method.name = "notifyAll" \
     |  my.method.name = "wait"
-        my.method.jni_name = "$(name:pascal)"   #   Leading capital letter
+        my.method.jni_name = "`$(name:camel)`"
     else
         my.method.jni_name = "$(name:camel)"
     endif
@@ -148,60 +139,53 @@ function resolve_method (method)
     if my.method.singleton = 1
         my.method.static = "static"
         my.method.jni_shim_signature_java = ""
-        my.method.jni_shim_signature_c = ""
         my.method.jni_shim_invocation_java = ""
-        my.method.jni_native_invocation_c = ""
         comma = ""
     else
         my.method.static = ""
-        my.method.jni_shim_signature_java = "long self"
-        my.method.jni_shim_signature_c = "jlong self"
+        my.method.jni_shim_signature_java = "self: Pointer"
         my.method.jni_shim_invocation_java = "self"
-        my.method.jni_native_invocation_c = "($(class.c_name)_t *) (intptr_t) self"
         comma = ", "
     endif
 
+    use_var_arg = 0
     for my.method.argument
+        if variadic = 1
+            use_var_arg = 1
+        endif
+    endfor
+
+    for my.method.argument
+        if argument.name = "val"
+            actual_name = "`$(argument.name:camel)`"
+        else
+            actual_name = "$(argument.name:camel)"
+        endif
+
         if resolve_container (argument) = 1
             my.method.okay = 0
             #echo "Skipping $(class.name).$(my.method.name) - can't deal with argument type $(argument.type)"
             last
         endif
 
-        if variadic = 1
-            if va_start <> "format"
-                jni_method_signature += " []"
-                jni_shim_invocation_java += " [0]"
-                jni_native_invocation_c += ", NULL"
-            endif
-        elsif jni_self_p = 1
-            jni_shim_signature_java += "$(comma)long self"
+        if jni_self_p = 1
+            jni_shim_signature_java += "$(comma)self: Pointer"
             jni_shim_invocation_java += "$(comma)self"
-            jni_shim_signature_c += "$(comma)jlong self"
-            jni_native_invocation_c += "$(comma)($(argument.c_type)) &self"
             my.method.return_self_p = 1
-            my.method->return.jni_shim_type = "long"
-        else
+            my.method->return.jni_shim_type = "Pointer"
+        elsif variadic = 0
             if jni_method_signature <> ""
                 jni_method_signature += ", "
             endif
-            jni_method_signature += "$(argument.jni_java_type:) $(argument.name:camel)"
-
-            jni_shim_signature_java += "$(comma)$(argument.jni_shim_type:) $(argument.name:camel)"
-            jni_shim_signature_c += "$(comma)$(argument.jni_jni_type:) $(argument.c_name)"
-            jni_shim_invocation_java += "$(comma)$(argument.jni_mapping:)"
-
-            if type = "format"
-                jni_native_invocation_c += "$(comma)\"%s\", $(argument.c_name)_"
-            elsif type = "string" | type = "buffer"
-                jni_native_invocation_c += "$(comma)$(argument.c_name)_"
-            elsif by_reference = 1
-                jni_native_invocation_c += "$(comma)($(argument.c_type)) (intptr_t) &$(argument.c_name)"
-            elsif jni_is_class = 1 | type = "anything" | type = "sockish"
-                jni_native_invocation_c += "$(comma)($(argument.c_type)) (intptr_t) $(argument.c_name)"
-            else
-                jni_native_invocation_c += "$(comma)($(argument.c_type)) $(argument.c_name)"
+            jni_shim_signature_java += "$(comma)"
+            jni_shim_invocation_java += "$(comma)"
+            if index () = count (my.method.argument) - 1 & use_var_arg = 1
+                jni_method_signature += "vararg "
+                argument.jni_shim_type = "Array<out $(argument.jni_shim_type:)>"
             endif
+            jni_method_signature += "$(actual_name:): $(argument.jni_java_type:)"
+            jni_shim_signature_java += "$(actual_name:): $(argument.jni_shim_type:)"
+            jni_shim_invocation_java += "$(argument.jni_mapping:)"
         endif
         comma = ", "
     endfor
@@ -216,16 +200,18 @@ function resolve_method (method)
                 my.method.okay = 0
                 #echo "Skipping $(class.name).$(my.method.name) - can't return unsized fresh buffer"
             elsif defined(my.method.return_self_p)
-                jni_java_type = "void"
+                jni_java_type = "Unit"
             endif
         endif
     endfor
 endfunction
 
 function resolve_class (class)
+    my.class.static = 1
     if defined (my.class.api) & !my.class.private
         my.class.okay = 1
         for constructor
+            my.class.static = 0
             resolve_method (constructor)
             if index () = 1 & constructor.okay = 0
                 my.class.okay = 0
@@ -238,6 +224,10 @@ function resolve_class (class)
             resolve_method (method)
         endfor
     else
+        my.class.okay = 0
+    endif
+
+    if my.class.name = "zpoller"
         my.class.okay = 0
     endif
 endfunction

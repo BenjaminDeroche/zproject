@@ -22,6 +22,7 @@ usr/bin/zproject_java_lib.gsl
 usr/bin/zproject_java_msvc.gsl
 usr/bin/zproject_jenkins.gsl
 usr/bin/zproject_kotlin.gsl
+usr/bin/zproject_kotlin_lib.gsl
 usr/bin/zproject_lua_ffi.gsl
 usr/bin/zproject_mingw32.gsl
 usr/bin/zproject_nodejs.gsl

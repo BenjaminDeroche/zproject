@@ -602,6 +602,8 @@ zproject's `project.xml` contains an extensive description of the available conf
     <bin name = "zproject_java_lib.gsl" />
     <bin name = "zproject_java_msvc.gsl" />
     <bin name = "zproject_jenkins.gsl" />
+    <bin name = "zproject_kotlin.gsl" />
+    <bin name = "zproject_kotlin_lib.gsl" />
     <bin name = "zproject_lua_ffi.gsl" />
     <bin name = "zproject_mingw32.gsl" />
     <bin name = "zproject_nodejs.gsl" />
